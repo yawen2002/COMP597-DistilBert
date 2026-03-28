@@ -1,5 +1,6 @@
 # === import necessary modules ===
-import src.models.DistilBert.model
+from src.models.DistilBert.model import model_init
+
 import src.config as config # Configurations
 import src.trainer as trainer # Trainer base class
 
