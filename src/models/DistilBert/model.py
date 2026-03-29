@@ -1,4 +1,3 @@
-from types import SimpleNamespace as NS
 from typing import Dict, Optional, Tuple
 import src.config as config
 import src.trainer as trainer
@@ -7,27 +6,16 @@ import torch.optim as optim
 import torch.utils.data as data
 import transformers
 
-
-def init_distilbert_info() -> NS:
-    return NS(
-        category="AutoModelForMaskedLM",
-        config=transformers.AutoConfig.from_pretrained("distilbert-base-uncased"),
-        train_length=512,
-        eval_length=512,
-    )
-
+DISTILBERT_MODEL_NAME = "distilbert-base-uncased"
 
 def init_distilbert_model(conf: config.Config) -> transformers.PreTrainedModel:
-    distilbert_conf = getattr(conf.model_configs, "DistilBert")
-    seed = getattr(distilbert_conf, "seed")
-    transformers.set_seed(seed)
-    info = init_distilbert_info()
-    return getattr(transformers, info.category).from_config(info.config)
+    transformers.set_seed(conf.model_configs.DistilBert.seed)
+    model_config = transformers.AutoConfig.from_pretrained(DISTILBERT_MODEL_NAME)
+    return transformers.AutoModelForMaskedLM.from_config(model_config)
 
 
 def init_distilbert_optim(conf: config.Config, model: transformers.PreTrainedModel) -> optim.Optimizer:
-    learning_rate = getattr(conf, "learning_rate")
-    return optim.Adam(model.parameters(), lr=learning_rate)
+    return optim.Adam(model.parameters(), lr=conf.learning_rate)
 
 
 def simple_trainer(
@@ -35,10 +23,7 @@ def simple_trainer(
     model: transformers.PreTrainedModel,
     dataset: data.Dataset,
 ) -> Tuple[trainer.Trainer, Optional[Dict]]:
-    distilbert_conf = getattr(conf.model_configs, "DistilBert")
-    batch_size = getattr(conf, "batch_size")
-    num_workers = getattr(distilbert_conf, "num_workers")
-    loader = data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers)
+    loader = data.DataLoader(dataset, batch_size=conf.batch_size)
     model = model.cuda()
     optimizer = init_distilbert_optim(conf, model)
     scheduler = transformers.get_scheduler("constant", optimizer=optimizer)
@@ -59,9 +44,8 @@ def simple_trainer(
 
 def model_init(conf: config.Config, dataset: data.Dataset) -> Tuple[trainer.Trainer, Optional[Dict]]:
     model = init_distilbert_model(conf)
-    trainer_name = getattr(conf, "trainer")
 
-    if trainer_name == "simple":
+    if conf.trainer == "simple":
         return simple_trainer(conf, model, dataset)
 
-    raise Exception(f"Unknown trainer type {trainer_name}")
+    raise Exception(f"Unknown trainer type {conf.trainer}")

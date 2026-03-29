@@ -1,8 +1,12 @@
-from types import SimpleNamespace as NS
 import src.config as config
 import torch
 import torch.utils.data
 from transformers import AutoConfig, set_seed
+
+DISTILBERT_MODEL_NAME = "distilbert-base-uncased"
+DISTILBERT_CATEGORY = "AutoModelForMaskedLM"
+DISTILBERT_TRAIN_LENGTH = 512
+DISTILBERT_EVAL_LENGTH = 512
 
 data_load_name = "DistilBert"
 generators = {}
@@ -19,60 +23,50 @@ class SyntheticData(torch.utils.data.Dataset):
     def __init__(self, generators, n: int, repeat: int):
         self.n = n
         self.repeat = repeat
-        self.data = self.gen(generators, n)
+        self.generators = generators
+        self.data = [self.gen() for _ in range(n)]
 
-    @staticmethod
-    def gen(generators, n: int):
-        return {
-            name: torch.stack([gen() for _ in range(n)])
-            for name, gen in generators.items()
-        }
+    def gen(self):
+        return {name: gen() for name, gen in self.generators.items()}
 
     def __getitem__(self, i):
-        idx = i % self.n
-        return {name: values[idx] for name, values in self.data.items()}
+        return self.data[i % self.n]
 
     def __len__(self):
         return self.n * self.repeat
 
 
-def vocabgen(info):
+def vocabgen(model_config, train_length: int):
     def gen():
-        return torch.randint(0, info.config.vocab_size, (info.train_length,))
+        return torch.randint(0, model_config.vocab_size, (train_length,))
 
     return gen
 
 
 @register_generator
-def gen_AutoModelForCausalLM(info):
+def gen_AutoModelForCausalLM(model_config, train_length: int):
     return {
-        "input_ids": vocabgen(info),
-        "labels": vocabgen(info),
+        "input_ids": vocabgen(model_config, train_length),
+        "labels": vocabgen(model_config, train_length),
     }
 
 
 @register_generator
-def gen_AutoModelForMaskedLM(info):
-    return gen_AutoModelForCausalLM(info)
+def gen_AutoModelForMaskedLM(model_config, train_length: int):
+    return gen_AutoModelForCausalLM(model_config, train_length)
 
 
 def load_data(conf: config.Config) -> torch.utils.data.Dataset:
-    distilbert_conf = getattr(conf.model_configs, "DistilBert")
-    batch_size = getattr(conf, "batch_size")
-    seed = getattr(distilbert_conf, "seed")
-    repeat = getattr(distilbert_conf, "repeat")
-
-    set_seed(seed)
-    distilbert_info = NS(
-        category="AutoModelForMaskedLM",
-        config=AutoConfig.from_pretrained("distilbert-base-uncased"),
-        train_length=512,
-        eval_length=512,
-    )
+    distilbert_conf = conf.model_configs.DistilBert
+    set_seed(distilbert_conf.seed)
+    model_config = AutoConfig.from_pretrained(DISTILBERT_MODEL_NAME)
 
     return SyntheticData(
-        generators=generators[distilbert_info.category](distilbert_info),
-        n=batch_size,
-        repeat=repeat,
+        generators=generators[DISTILBERT_CATEGORY](
+            model_config,
+            DISTILBERT_TRAIN_LENGTH,
+        ),
+        n=conf.batch_size,
+        repeat=distilbert_conf.repeat,
     )
 
