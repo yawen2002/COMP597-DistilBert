@@ -19,14 +19,18 @@ class SyntheticData(torch.utils.data.Dataset):
     def __init__(self, generators, n: int, repeat: int):
         self.n = n
         self.repeat = repeat
-        self.data = [self.gen(generators) for _ in range(n)]
+        self.data = self.gen(generators, n)
 
     @staticmethod
-    def gen(generators):
-        return {name: gen() for name, gen in generators.items()}
+    def gen(generators, n: int):
+        return {
+            name: torch.stack([gen() for _ in range(n)])
+            for name, gen in generators.items()
+        }
 
     def __getitem__(self, i):
-        return self.data[i % self.n]
+        idx = i % self.n
+        return {name: values[idx] for name, values in self.data.items()}
 
     def __len__(self):
         return self.n * self.repeat
