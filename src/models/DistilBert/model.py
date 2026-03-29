@@ -1,36 +1,67 @@
+from types import SimpleNamespace as NS
 from typing import Dict, Optional, Tuple
 import src.config as config
 import src.trainer as trainer
-
-import torch.nn as nn
+import src.trainer.stats as trainer_stats
 import torch.optim as optim
 import torch.utils.data as data
-import torch.nn.functional as F
+import transformers
 
-import sys
 
-class Dummy(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(3, 24, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(24, 48, 5)
-        self.fc1 = nn.Linear(1728, 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 10)
-    
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return F.softmax(x, dim=1)
+def init_distilbert_info() -> NS:
+    return NS(
+        category="AutoModelForMaskedLM",
+        config=transformers.AutoConfig.from_pretrained("distilbert-base-uncased"),
+        train_length=512,
+        eval_length=512,
+    )
+
+
+def init_distilbert_model(conf: config.Config) -> transformers.PreTrainedModel:
+    distilbert_conf = getattr(conf.model_configs, "DistilBert")
+    seed = getattr(distilbert_conf, "seed")
+    transformers.set_seed(seed)
+    info = init_distilbert_info()
+    return getattr(transformers, info.category).from_config(info.config)
+
+
+def init_distilbert_optim(conf: config.Config, model: transformers.PreTrainedModel) -> optim.Optimizer:
+    learning_rate = getattr(conf, "learning_rate")
+    return optim.Adam(model.parameters(), lr=learning_rate)
+
+
+def simple_trainer(
+    conf: config.Config,
+    model: transformers.PreTrainedModel,
+    dataset: data.Dataset,
+) -> Tuple[trainer.Trainer, Optional[Dict]]:
+    distilbert_conf = getattr(conf.model_configs, "DistilBert")
+    batch_size = getattr(conf, "batch_size")
+    num_workers = getattr(distilbert_conf, "num_workers")
+    loader = data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers)
+    model = model.cuda()
+    optimizer = init_distilbert_optim(conf, model)
+    scheduler = transformers.get_scheduler("constant", optimizer=optimizer)
+
+    return trainer.SimpleTrainer(
+        loader=loader,
+        model=model,
+        optimizer=optimizer,
+        lr_scheduler=scheduler,
+        device=model.device,
+        stats=trainer_stats.init_from_conf(
+            conf=conf,
+            device=model.device,
+            num_train_steps=len(loader),
+        ),
+    ), None
+
 
 def model_init(conf: config.Config, dataset: data.Dataset) -> Tuple[trainer.Trainer, Optional[Dict]]:
-    print("hello from the dummy model")
-    sys.exit(0)
-    model = Dummy() 
-    loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size.value, shuffle=True, num_workers=2)
-    return None, None
+    model = init_distilbert_model(conf)
+    trainer_name = getattr(conf, "trainer")
+
+    if trainer_name == "simple":
+        return simple_trainer(conf, model, dataset)
+
+    raise Exception(f"Unknown trainer type {trainer_name}")

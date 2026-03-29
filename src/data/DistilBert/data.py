@@ -1,14 +1,74 @@
+from types import SimpleNamespace as NS
 import src.config as config
+import torch
 import torch.utils.data
-import torchvision
-import torchvision.transforms as transforms
+from transformers import AutoConfig, set_seed
 
-data_load_name="DistilBert"
+data_load_name = "DistilBert"
+generators = {}
 
-def load_data(conf : config.Config) -> torch.utils.data.Dataset:
-    # Your implementation here. I'll put dummy's implementation here for now, we should change it.
-    print("hello from the dummy data.")
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-    return trainset
+
+def register_generator(fn):
+    generators[fn.__name__.lstrip("gen_")] = fn
+    return fn
+
+
+class SyntheticData(torch.utils.data.Dataset):
+    """Synthetic dataset adapted from MilaBench's Hugging Face benchmark."""
+
+    def __init__(self, generators, n: int, repeat: int):
+        self.n = n
+        self.repeat = repeat
+        self.generators = generators
+        self.data = [self.gen() for _ in range(n)]
+
+    def gen(self):
+        return {name: gen() for name, gen in self.generators.items()}
+
+    def __getitem__(self, i):
+        return self.data[i % self.n]
+
+    def __len__(self):
+        return self.n * self.repeat
+
+
+def vocabgen(info):
+    def gen():
+        return torch.randint(0, info.config.vocab_size, (info.train_length,))
+
+    return gen
+
+
+@register_generator
+def gen_AutoModelForCausalLM(info):
+    return {
+        "input_ids": vocabgen(info),
+        "labels": vocabgen(info),
+    }
+
+
+@register_generator
+def gen_AutoModelForMaskedLM(info):
+    return gen_AutoModelForCausalLM(info)
+
+
+def load_data(conf: config.Config) -> torch.utils.data.Dataset:
+    distilbert_conf = getattr(conf.model_configs, "DistilBert")
+    batch_size = getattr(conf, "batch_size")
+    seed = getattr(distilbert_conf, "seed")
+    repeat = getattr(distilbert_conf, "repeat")
+
+    set_seed(seed)
+    distilbert_info = NS(
+        category="AutoModelForMaskedLM",
+        config=AutoConfig.from_pretrained("distilbert-base-uncased"),
+        train_length=512,
+        eval_length=512,
+    )
+
+    return SyntheticData(
+        generators=generators[distilbert_info.category](distilbert_info),
+        n=batch_size,
+        repeat=repeat,
+    )
 
