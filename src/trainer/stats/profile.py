@@ -41,9 +41,9 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
     """Fine-grained timing and utilization measurements.
 
     This stats class reuses the starter code's synchronized phase timing pattern
-    and adds coarse timeline sampling for system utilization measurements.
-    Timeline samples are taken at a fixed wall-clock interval to match the
-    granularity of NVML/CPU utilization counters.
+    and adds coarse timeline sampling for CPU/GPU utilization, GPU memory, and
+    GPU energy measurements. Timeline samples are taken at a fixed wall-clock
+    interval to match the granularity of NVML/CPU utilization counters.
     """
 
     def __init__(
@@ -56,6 +56,10 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
         batch_size: int,
     ) -> None:
         super().__init__(device=device)
+        if device.type != "cuda":
+            raise ValueError("ProfileTrainerStats requires a CUDA device.")
+        if sample_interval_ms <= 0:
+            raise ValueError("sample_interval_ms must be positive.")
         self.device = device
         self.run_num = run_num
         self.output_dir = output_dir
@@ -64,12 +68,13 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
         self.model_name = model_name
         self.batch_size = batch_size
         self.current_step = 0
-        self.current_phase = "idle"
-        self.last_loss: Optional[float] = None
+        self.current_state = "idle"
         self.step_rows: list[Dict[str, Any]] = []
         self.timeline_rows: list[Dict[str, Any]] = []
         self.train_start_ns = 0
         self.train_end_ns = 0
+        self.train_end_energy_mj = 0
+        self.last_step_end_ns = 0
         self.stop_event = threading.Event()
         self.timeline_thread: Optional[threading.Thread] = None
         self.process = psutil.Process()
@@ -78,23 +83,44 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
         os.makedirs(self.output_dir, exist_ok=True)
 
         pynvml.nvmlInit()
-        gpu_index = 0 if self.device.index is None else self.device.index
-        self.handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
-        self.gpu_index = gpu_index
-        self.gpu_name = self._decode_gpu_name(pynvml.nvmlDeviceGetName(self.handle))
+        self.handle = self._get_nvml_handle()
         self.run_start_energy_mj = 0
-
-    def _decode_gpu_name(self, value: Any) -> str:
-        if isinstance(value, bytes):
-            return value.decode("utf-8")
-        return str(value)
 
     def _get_process_cpu_capacity(self) -> int:
         try:
-            return max(len(self.process.cpu_affinity()), 1)
+            affinity = self.process.cpu_affinity()
+            if affinity is not None:
+                return max(len(affinity), 1)
         except (AttributeError, psutil.Error):
-            cpu_count = psutil.cpu_count()
-            return 1 if cpu_count is None else max(cpu_count, 1)
+            pass
+        cpu_count = psutil.cpu_count()
+        return 1 if cpu_count is None else max(cpu_count, 1)
+
+    def _get_nvml_handle(self) -> Any:
+        logical_gpu_index = 0 if self.device.index is None else self.device.index
+        visible_devices = os.environ.get("CUDA_VISIBLE_DEVICES")
+        if visible_devices is not None:
+            visible_device_list = [
+                entry.strip() for entry in visible_devices.split(",") if entry.strip()
+            ]
+            if logical_gpu_index < len(visible_device_list):
+                mapped_gpu = visible_device_list[logical_gpu_index]
+                try:
+                    physical_gpu_index = int(mapped_gpu)
+                    return pynvml.nvmlDeviceGetHandleByIndex(physical_gpu_index)
+                except ValueError:
+                    try:
+                        handle = pynvml.nvmlDeviceGetHandleByUUID(mapped_gpu.encode("utf-8"))
+                        return handle
+                    except (AttributeError, pynvml.NVMLError):
+                        logger.warning(
+                            "CUDA_VISIBLE_DEVICES entry '%s' could not be mapped through NVML; "
+                            "falling back to logical GPU index %d.",
+                            mapped_gpu,
+                            logical_gpu_index,
+                        )
+
+        return pynvml.nvmlDeviceGetHandleByIndex(logical_gpu_index)
 
     def _timeline_path(self) -> str:
         return os.path.join(self.output_dir, f"run_{self.run_num}_profile_timeline.csv")
@@ -114,12 +140,19 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
     def _energy_since_start(self) -> int:
         return pynvml.nvmlDeviceGetTotalEnergyConsumption(self.handle) - self.run_start_energy_mj
 
-    def _append_timeline_row(self) -> None:
-        now_ns = time.perf_counter_ns()
+    def _append_timeline_row(
+        self,
+        timestamp_ns: Optional[int] = None,
+        energy_mj_from_start: Optional[int] = None,
+    ) -> None:
+        now_ns = time.perf_counter_ns() if timestamp_ns is None else timestamp_ns
+        step = self.current_step
+        state = self.current_state
         gpu_util = pynvml.nvmlDeviceGetUtilizationRates(self.handle)
         gpu_memory = pynvml.nvmlDeviceGetMemoryInfo(self.handle)
-        system_cpu = psutil.cpu_percent(interval=None)
         process_cpu = self.process.cpu_percent(interval=None)
+        if energy_mj_from_start is None:
+            energy_mj_from_start = self._energy_since_start()
         self.timeline_rows.append(
             {
                 "run_num": self.run_num,
@@ -127,15 +160,13 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
                 "batch_size": self.batch_size,
                 "timestamp_ns": now_ns,
                 "time_since_start_s": (now_ns - self.train_start_ns) / 1_000_000_000,
-                "step": self.current_step,
-                "phase": self.current_phase,
-                "system_cpu_util_pct": system_cpu,
+                "step": step,
+                "state": state,
                 "process_cpu_util_pct": process_cpu / self.process_cpu_capacity,
                 "gpu_util_pct": gpu_util.gpu,
                 "gpu_mem_used_mb": gpu_memory.used / (1024 * 1024),
-                "gpu_mem_total_mb": gpu_memory.total / (1024 * 1024),
                 "gpu_mem_util_pct": 100.0 * gpu_memory.used / gpu_memory.total,
-                "gpu_energy_mj_from_start": self._energy_since_start(),
+                "gpu_energy_mj_from_start": energy_mj_from_start,
             }
         )
 
@@ -152,11 +183,11 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
 
     def start_train(self) -> None:
         torch.cuda.synchronize(self.device)
-        self.current_phase = "train"
+        self.current_state = "train"
         self.current_step = 0
+        self.last_step_end_ns = 0
         self.train_start_ns = time.perf_counter_ns()
         self.run_start_energy_mj = pynvml.nvmlDeviceGetTotalEnergyConsumption(self.handle)
-        psutil.cpu_percent(interval=None)
         self.process.cpu_percent(interval=None)
         self._append_timeline_row()
         self.stop_event.clear()
@@ -165,58 +196,65 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
 
     def stop_train(self) -> None:
         torch.cuda.synchronize(self.device)
-        self.current_phase = "finished"
+        self.current_state = "finished"
         self.train_end_ns = time.perf_counter_ns()
-        self._append_timeline_row()
+        self.train_end_energy_mj = self._energy_since_start()
+        self._append_timeline_row(
+            timestamp_ns=self.train_end_ns,
+            energy_mj_from_start=self.train_end_energy_mj,
+        )
         self.stop_event.set()
         if self.timeline_thread is not None:
             self.timeline_thread.join()
 
     def start_step(self) -> None:
         self.current_step += 1
-        self.current_phase = "step"
+        self.current_state = "step"
         super().start_step()
 
     def stop_step(self) -> None:
         super().stop_step()
-        self.current_phase = "train"
+        self.last_step_end_ns = time.perf_counter_ns()
+        self.current_state = "train"
 
     def start_forward(self) -> None:
-        self.current_phase = "forward"
+        self.current_state = "forward"
         super().start_forward()
 
     def stop_forward(self) -> None:
         super().stop_forward()
-        self.current_phase = "step"
+        self.current_state = "step"
 
     def start_backward(self) -> None:
-        self.current_phase = "backward"
+        self.current_state = "backward"
         super().start_backward()
 
     def stop_backward(self) -> None:
         super().stop_backward()
-        self.current_phase = "step"
+        self.current_state = "step"
 
     def start_optimizer_step(self) -> None:
-        self.current_phase = "optimizer"
+        self.current_state = "optimizer"
         super().start_optimizer_step()
 
     def stop_optimizer_step(self) -> None:
         super().stop_optimizer_step()
-        self.current_phase = "step"
+        self.current_state = "step"
 
     def log_loss(self, loss: torch.Tensor) -> None:
-        self.last_loss = float(loss.detach().item())
+        pass
 
     def log_step(self) -> None:
+        step_end_ns = self.last_step_end_ns
+        if step_end_ns == 0:
+            step_end_ns = time.perf_counter_ns()
         self.step_rows.append(
             {
                 "run_num": self.run_num,
                 "model": self.model_name,
                 "batch_size": self.batch_size,
                 "step": self.current_step,
-                "step_end_time_s": (time.perf_counter_ns() - self.train_start_ns) / 1_000_000_000,
-                "loss": self.last_loss,
+                "step_end_time_s": (step_end_ns - self.train_start_ns) / 1_000_000_000,
                 "step_time_ns": self.step_stats.get_last(),
                 "forward_time_ns": self.forward_stats.get_last(),
                 "backward_time_ns": self.backward_stats.get_last(),
@@ -226,6 +264,10 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
 
     def log_stats(self) -> None:
         runtime_ns = self.train_end_ns - self.train_start_ns
+        timeline_rows = sorted(
+            (row for row in self.timeline_rows if row["timestamp_ns"] <= self.train_end_ns),
+            key=lambda row: row["timestamp_ns"],
+        )
         step_mean, step_stdev = self._summary_stats(self.step_stats.stat.history)
         forward_mean, forward_stdev = self._summary_stats(self.forward_stats.stat.history)
         backward_mean, backward_stdev = self._summary_stats(self.backward_stats.stat.history)
@@ -236,8 +278,6 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
                 "run_num": self.run_num,
                 "model": self.model_name,
                 "batch_size": self.batch_size,
-                "gpu_index": self.gpu_index,
-                "gpu_name": self.gpu_name,
                 "sample_interval_ms": self.sample_interval_ms,
                 "runtime_ns": runtime_ns,
                 "runtime_s": runtime_ns / 1_000_000_000,
@@ -250,15 +290,15 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
                 "backward_time_stdev_ns": backward_stdev,
                 "optimizer_time_mean_ns": optimizer_mean,
                 "optimizer_time_stdev_ns": optimizer_stdev,
-                "gpu_energy_mj_total": self._energy_since_start(),
+                "gpu_energy_mj_total": self.train_end_energy_mj,
             }
         ]
 
-        if self.timeline_rows:
+        if timeline_rows:
             self._write_csv(
                 self._timeline_path(),
-                list(self.timeline_rows[0].keys()),
-                self.timeline_rows,
+                list(timeline_rows[0].keys()),
+                timeline_rows,
             )
         if self.step_rows:
             self._write_csv(
