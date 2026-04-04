@@ -15,7 +15,7 @@ def init_distilbert_model(conf: config.Config) -> transformers.PreTrainedModel:
 
 
 def init_distilbert_optim(conf: config.Config, model: transformers.PreTrainedModel) -> optim.Optimizer:
-    return optim.Adam(model.parameters(), lr=conf.learning_rate)
+    return optim.AdamW(model.parameters(), lr=conf.learning_rate)
 
 
 def simple_trainer(
@@ -38,6 +38,7 @@ def simple_trainer(
             conf=conf,
             device=model.device,
             num_train_steps=len(loader),
+            # Report terminology: in this synthetic setup, len(loader) == repeat, so this is the number of training steps.
         ),
     ), None
 

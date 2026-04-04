@@ -5,8 +5,8 @@ from transformers import AutoConfig, set_seed
 
 DISTILBERT_MODEL_NAME = "distilbert-base-uncased"
 DISTILBERT_CATEGORY = "AutoModelForMaskedLM"
-DISTILBERT_TRAIN_LENGTH = 512
-DISTILBERT_EVAL_LENGTH = 512
+DISTILBERT_TRAIN_LENGTH = 512 # From MilaBench
+DISTILBERT_EVAL_LENGTH = 512 # From MilaBench
 
 data_load_name = "DistilBert"
 generators = {}
@@ -67,6 +67,7 @@ def load_data(conf: config.Config) -> torch.utils.data.Dataset:
             DISTILBERT_TRAIN_LENGTH,
         ),
         n=conf.batch_size,
-        repeat=distilbert_conf.repeat,
+        repeat=distilbert_conf.repeat, 
+        # Report terminology: in this synthetic setup, repeat equals the number of training steps because n=batch_size and the DataLoader uses batch_size as well.
     )
 
