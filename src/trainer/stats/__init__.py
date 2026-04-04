@@ -10,6 +10,9 @@ from src.trainer.stats.noop import NOOPTrainerStats
 from src.trainer.stats.simple import SimpleTrainerStats
 from src.trainer.stats.profile import ProfileTrainerStats
 from src.trainer.stats.codecarbon import CodeCarbonStats
+from src.trainer.stats.codecarbon_grouped import CodeCarbonGroupedStats
+from src.trainer.stats.codecarbon_onerun import CodeCarbonOneRunStats
+from src.trainer.stats.nvml_onerun import NVMLOneRunStats
 from src.trainer.stats.utils import *
 import src.auto_discovery as auto_discovery
 import src.config as config
