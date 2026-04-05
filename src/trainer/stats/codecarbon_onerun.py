@@ -3,10 +3,12 @@ import codecarbon
 import codecarbon.core.cpu
 import logging
 import os
+import time
 
 import src.config as config
 import src.trainer.stats.base as base
 from src.trainer.stats.codecarbon import SimpleFileOutput
+from src.trainer.stats.training_runtime import write_training_runtime_csv
 import torch
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,8 @@ def construct_trainer_stats(conf: config.Config, **kwargs) -> base.TrainerStats:
         run_num=one_run_conf.run_num,
         project_name=one_run_conf.project_name,
         output_dir=one_run_conf.output_dir,
+        model_name=conf.model,
+        batch_size=conf.batch_size,
     )
 
 
@@ -44,11 +48,17 @@ class CodeCarbonOneRunStats(base.TrainerStats):
         run_num: int,
         project_name: str,
         output_dir: str,
+        model_name: str,
+        batch_size: int,
     ) -> None:
         self.device = device
         self.run_num = run_num
         self.project_name = project_name
         self.output_dir = output_dir
+        self.model_name = model_name
+        self.batch_size = batch_size
+        self.train_start_ns = 0
+        self.train_end_ns = 0
         os.makedirs(self.output_dir, exist_ok=True)
 
         run_number = f"run_{run_num}_"
@@ -73,11 +83,13 @@ class CodeCarbonOneRunStats(base.TrainerStats):
 
     def start_train(self) -> None:
         torch.cuda.synchronize(self.device)
+        self.train_start_ns = time.perf_counter_ns()
         self.total_training_tracker.start()
 
     def stop_train(self) -> None:
         torch.cuda.synchronize(self.device)
         self.total_training_tracker.stop()
+        self.train_end_ns = time.perf_counter_ns()
 
     def start_step(self) -> None:
         pass
@@ -116,4 +128,11 @@ class CodeCarbonOneRunStats(base.TrainerStats):
         pass
 
     def log_stats(self) -> None:
-        pass
+        runtime_path = write_training_runtime_csv(
+            output_dir=self.output_dir,
+            run_num=self.run_num,
+            model_name=self.model_name,
+            batch_size=self.batch_size,
+            runtime_ns=self.train_end_ns - self.train_start_ns,
+        )
+        logger.info("TRAINING RUNTIME LOGGING: Summary saved to %s", runtime_path)
