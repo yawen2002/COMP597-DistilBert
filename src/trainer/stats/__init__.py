@@ -11,6 +11,7 @@ from src.trainer.stats.simple import SimpleTrainerStats
 from src.trainer.stats.profile import ProfileTrainerStats
 from src.trainer.stats.codecarbon import CodeCarbonStats
 from src.trainer.stats.codecarbon_onerun import CodeCarbonOneRunStats
+from src.trainer.stats.training_runtime import TrainingRuntimeStats
 # Enable additional experiment families only after their modules are present on
 # the remote machine too.
 # from src.trainer.stats.codecarbon_grouped import CodeCarbonGroupedStats
