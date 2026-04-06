@@ -19,6 +19,6 @@ class TrainerStatsConfig(_BaseConfig):
         )
         self._arg_sample_interval_ms = _Arg(
             type=int,
-            help="Timeline sampling interval in milliseconds.",
+            help="Time-based timeline sampling interval in milliseconds for CPU/GPU utilization and memory.",
             default=500,
         )
