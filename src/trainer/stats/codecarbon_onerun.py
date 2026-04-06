@@ -83,13 +83,13 @@ class CodeCarbonOneRunStats(base.TrainerStats):
 
     def start_train(self) -> None:
         torch.cuda.synchronize(self.device)
-        self.train_start_ns = time.perf_counter_ns()
         self.total_training_tracker.start()
+        self.train_start_ns = time.perf_counter_ns()
 
     def stop_train(self) -> None:
         torch.cuda.synchronize(self.device)
-        self.total_training_tracker.stop()
         self.train_end_ns = time.perf_counter_ns()
+        self.total_training_tracker.stop()
 
     def start_step(self) -> None:
         pass

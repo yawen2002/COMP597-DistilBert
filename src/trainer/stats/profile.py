@@ -155,6 +155,10 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
         )
 
     def _sample_timeline(self) -> None:
+        wait_for_start_s = min(self.sample_interval_s, 0.001)
+        while self.train_start_ns == 0:
+            if self.stop_event.wait(wait_for_start_s):
+                return
         while not self.stop_event.wait(self.sample_interval_s):
             self._append_timeline_row()
 
@@ -166,22 +170,22 @@ class ProfileTrainerStats(simple.SimpleTrainerStats):
         return float(statistics.mean(values)), float(statistics.stdev(values))
 
     def start_train(self) -> None:
-        torch.cuda.synchronize(self.device)
         self.current_state = "train"
         self.current_step = 0
         self.last_loss = None
         self.last_step_end_ns = 0
-        self.train_start_ns = time.perf_counter_ns()
+        self.train_start_ns = 0
         self.process.cpu_percent(interval=None)
-        self._append_timeline_row()
         self.stop_event.clear()
         self.timeline_thread = threading.Thread(target=self._sample_timeline, daemon=True)
         self.timeline_thread.start()
+        torch.cuda.synchronize(self.device)
+        self.train_start_ns = time.perf_counter_ns()
 
     def stop_train(self) -> None:
         torch.cuda.synchronize(self.device)
-        self.current_state = "finished"
         self.train_end_ns = time.perf_counter_ns()
+        self.current_state = "finished"
         self._append_timeline_row(timestamp_ns=self.train_end_ns)
         self.stop_event.set()
         if self.timeline_thread is not None:
