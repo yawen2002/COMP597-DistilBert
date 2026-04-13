@@ -40,7 +40,6 @@ def construct_trainer_stats(conf: config.Config, **kwargs) -> base.TrainerStats:
 
 
 class CodeCarbonOneRunStats(base.TrainerStats):
-    """Provides one end-to-end CodeCarbon measurement for the full training run."""
 
     def __init__(
         self,
@@ -64,7 +63,6 @@ class CodeCarbonOneRunStats(base.TrainerStats):
         run_number = f"run_{run_num}_"
         gpu_id = self.device.index
 
-        # Normal-mode tracker to track the entire training loop
         self.total_training_tracker = OfflineEmissionsTracker(
             project_name=project_name,
             country_iso_code="CAN",

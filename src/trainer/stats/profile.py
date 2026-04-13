@@ -39,14 +39,6 @@ def construct_trainer_stats(conf: config.Config, **kwargs) -> base.TrainerStats:
 
 
 class ProfileTrainerStats(simple.SimpleTrainerStats):
-    """Fine-grained timing and utilization measurements.
-
-    This stats class reuses the starter code's synchronized phase timing pattern
-    and adds coarse timeline sampling for CPU utilization, process RSS memory,
-    GPU utilization, and GPU memory. Timeline samples are taken at a fixed
-    wall-clock interval configured by ``sample_interval_ms`` so the system-level
-    measurements stay time-based and low overhead.
-    """
 
     def __init__(
         self,

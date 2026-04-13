@@ -38,7 +38,6 @@ def simple_trainer(
             conf=conf,
             device=model.device,
             num_train_steps=len(loader),
-            # Report terminology: in this synthetic setup, len(loader) == repeat, so this is the number of training steps.
         ),
     ), None
 

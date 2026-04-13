@@ -13,8 +13,6 @@ from src.trainer.stats.codecarbon import CodeCarbonStats
 from src.trainer.stats.codecarbon_onerun import CodeCarbonOneRunStats
 from src.trainer.stats.training_runtime import TrainingRuntimeStats
 from src.trainer.stats.codecarbon_grouped import CodeCarbonGroupedStats
-# Enable additional experiment families only after their modules are present on
-# the remote machine too.
 from src.trainer.stats.utils import *
 import src.auto_discovery as auto_discovery
 import src.config as config

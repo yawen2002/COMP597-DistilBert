@@ -23,7 +23,6 @@ trainer_stats_name = "codecarbon_grouped"
 
 
 class TaskOnlyFileOutput(SimpleFileOutput):
-    """Write only CodeCarbon task rows to a single CSV file."""
 
     def out(self, _total, _delta):
         pass
@@ -62,7 +61,6 @@ def construct_trainer_stats(conf: config.Config, **kwargs) -> base.TrainerStats:
 
 
 class CodeCarbonGroupedStats(base.TrainerStats):
-    """Provides grouped-step CodeCarbon measurements across the training run."""
 
     def __init__(
         self,
@@ -116,7 +114,6 @@ class CodeCarbonGroupedStats(base.TrainerStats):
             log_level="warning",
         )
 
-        # Initialise the task-mode tracker before tasks are started.
         self.grouped_tracker.start()
 
     def _make_group_name(self, start_step: int) -> str:
