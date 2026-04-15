@@ -1,0 +1,2 @@
+family,model,data,trainer,trainer_stats,batch_size,repeat,learning_rate,seed
+baseline,DistilBert,DistilBert,simple,training_runtime,16,1700,0.001,1234

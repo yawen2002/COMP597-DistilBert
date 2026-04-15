@@ -1,0 +1,2 @@
+family,model,batch_size,num_runs,average_runtime_ns,average_runtime_s
+codecarbon_grouped,DistilBert,16,3,289932908185,289.932908185

@@ -1,0 +1,2 @@
+family,model,data,trainer,trainer_stats,batch_size,repeat,learning_rate,seed,project_name,steps_per_group
+codecarbon_grouped,DistilBert,DistilBert,simple,codecarbon_grouped,64,425,0.001,1234,distilbert,1

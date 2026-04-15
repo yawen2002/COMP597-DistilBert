@@ -1,0 +1,2 @@
+family,model,batch_size,num_runs,average_runtime_ns,average_runtime_s
+codecarbon_onerun,DistilBert,32,3,281263166968,281.263166968

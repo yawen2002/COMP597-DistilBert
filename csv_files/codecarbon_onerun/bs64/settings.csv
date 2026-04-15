@@ -1,0 +1,2 @@
+family,model,data,trainer,trainer_stats,batch_size,repeat,learning_rate,seed,project_name
+codecarbon_onerun,DistilBert,DistilBert,simple,codecarbon_onerun,64,425,0.001,1234,distilbert

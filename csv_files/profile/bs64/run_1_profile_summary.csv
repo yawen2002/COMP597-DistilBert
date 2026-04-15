@@ -1,0 +1,2 @@
+run_num,model,batch_size,sample_interval_ms,runtime_ns,runtime_s,steps_completed,forward_time_mean_ns,forward_time_stdev_ns,backward_time_mean_ns,backward_time_stdev_ns,optimizer_time_mean_ns,optimizer_time_stdev_ns
+1,DistilBert,64,500,278699664055,278.699664055,425,231923126.42588234,4572991.09593049,411162558.2588235,3625170.2101048375,11899207.444705883,1027883.8078193333

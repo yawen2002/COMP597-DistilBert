@@ -1,0 +1,2 @@
+family,model,batch_size,num_runs,average_runtime_ns,average_runtime_s
+baseline,DistilBert,16,3,284508510997,284.508510997

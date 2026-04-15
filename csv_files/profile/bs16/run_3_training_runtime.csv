@@ -1,0 +1,2 @@
+run_num,model,batch_size,runtime_ns,runtime_s
+3,DistilBert,16,285322598155,285.322598155

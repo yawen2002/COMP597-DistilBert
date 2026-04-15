@@ -1,0 +1,4 @@
+batch_size,num_runs,mean_gpu_memory_gib,std_gpu_memory_gib
+16,3,7.19,0.00
+32,3,13.33,0.00
+64,3,25.58,0.00

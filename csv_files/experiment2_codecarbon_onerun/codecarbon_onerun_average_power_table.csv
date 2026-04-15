@@ -1,0 +1,4 @@
+batch_size,mean_gpu_power_w,std_gpu_power_w,mean_cpu_power_w,std_cpu_power_w,mean_ram_power_w,std_ram_power_w
+16,225.36,10.30,360.00,0.00,10.00,0.00
+32,230.05,1.05,360.00,0.00,10.00,0.00
+64,233.73,1.44,360.00,0.00,10.00,0.00

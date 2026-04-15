@@ -1,0 +1,2 @@
+family,model,data,trainer,trainer_stats,batch_size,repeat,learning_rate,seed,sample_interval_ms
+profile,DistilBert,DistilBert,simple,profile,64,425,0.001,1234,500

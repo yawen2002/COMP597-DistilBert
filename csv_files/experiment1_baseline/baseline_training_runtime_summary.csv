@@ -1,0 +1,4 @@
+batch_size,steps,average_training_runtime_s,std_training_runtime_s
+16,1700,284.51,1.01
+32,850,280.91,0.73
+64,425,278.43,1.34

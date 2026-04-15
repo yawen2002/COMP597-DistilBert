@@ -1,0 +1,4 @@
+batch_size,steps_per_group,num_runs,groups_per_run,invalid_zero_energy_groups,mean_group_duration_s,std_group_duration_s,mean_group_energy_wh,std_group_energy_wh,mean_group_gpu_energy_mwh,std_group_gpu_energy_mwh,mean_group_gpu_power_w,std_group_gpu_power_w,mean_group_emissions_mg,std_group_emissions_mg
+16,3,3,567,0,0.51,0.00,0.08,0.00,31.70,0.32,224.66,0.81,0.33,0.00
+32,2,3,425,0,0.67,0.00,0.11,0.00,42.18,0.25,227.60,0.38,0.44,0.00
+64,1,3,425,0,0.66,0.00,0.11,0.00,41.83,0.26,228.79,0.54,0.43,0.00
